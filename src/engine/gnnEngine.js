@@ -146,7 +146,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
       status = "REROUTED";
     } else if (node.disruptionScore >= 0.6 && !isDirectlyRerouted) {
       status = "DISRUPTED";
-    } else if (!isMitigated && (dynamicRisk >= 0.25 || remainingInventoryDays < 15)) {
+    } else if (!isMitigated && (dynamicRisk >= 0.15 || remainingInventoryDays < 30 || delayDays > 0)) {
       status = "WARNING";
     }
 
