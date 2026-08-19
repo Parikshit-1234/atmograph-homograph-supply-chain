@@ -93,41 +93,50 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
       node.gnnLayer3 * 0.85
     );
 
+    // Check direct and upstream reroute/mitigation status
+    const isDirectlyRerouted = node.isRerouted || (node.status === "REROUTED");
+    const areUpstreamMitigated = node.upstreamSources.length > 0 && node.upstreamSources.every(src => {
+      const srcNode = nodeMap.get(src.id);
+      return srcNode && (srcNode.status === "REROUTED" || srcNode.isRerouted);
+    });
+    const isMitigated = isDirectlyRerouted || areUpstreamMitigated;
+
     // Apply timeline propagation multiplier: as time progresses, inventory depletes & delays compound
     let dynamicRisk = aggregatedRisk;
-    if (timelineDays > 0 && aggregatedRisk > 0.05) {
-      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.6));
+    if (isMitigated) {
+      dynamicRisk = Math.min(dynamicRisk, 0.05);
+    } else if (timelineDays > 0 && aggregatedRisk > 0.05) {
+      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.5));
     }
 
     // Calculate Inventory Buffer Depletion
-    const depletionRate = timelineDays > 0 ? (timelineDays * (0.4 + dynamicRisk * 0.8)) : 0;
+    // Only deplete inventory if there is active, unmitigated risk (dynamicRisk > 0.15)
+    let depletionRate = 0;
+    if (!isMitigated && timelineDays > 0 && dynamicRisk > 0.15) {
+      depletionRate = timelineDays * (dynamicRisk * 1.1);
+    }
     const remainingInventoryDays = Math.max(0, Math.round(node.inventoryDays - depletionRate));
 
     // Calculate Downstream Delay Projection in Days
     let delayDays = 0;
-    if (node.disruptionScore >= 0.6) {
+    if (isMitigated) {
+      delayDays = 0;
+    } else if (node.disruptionScore >= 0.6) {
       // Direct disruption
       delayDays = Math.round(30 * (1 + timelineFactor) * node.disruptionScore);
-    } else if (dynamicRisk > 0.1) {
+    } else if (dynamicRisk > 0.15) {
       // Downstream ripple effect
-      const hopMult = node.hopDistance === 1 ? 1.2 : node.hopDistance === 2 ? 1.6 : 2.0;
-      delayDays = Math.round(15 * dynamicRisk * hopMult * (1 + timelineFactor * 0.8));
-    }
-
-    // Rerouted status check
-    const isMitigated = node.isRerouted || (node.status === "REROUTED");
-    if (isMitigated) {
-      dynamicRisk = Math.max(0, dynamicRisk * 0.25);
-      delayDays = Math.round(delayDays * 0.2);
+      const hopMult = node.hopDistance === 1 ? 1.2 : node.hopDistance === 2 ? 1.5 : 1.8;
+      delayDays = Math.round(15 * dynamicRisk * hopMult * (1 + timelineFactor * 0.6));
     }
 
     // Status classification
     let status = "NORMAL";
-    if (isMitigated) {
+    if (isDirectlyRerouted) {
       status = "REROUTED";
-    } else if (node.disruptionScore >= 0.6) {
+    } else if (node.disruptionScore >= 0.6 && !isDirectlyRerouted) {
       status = "DISRUPTED";
-    } else if (dynamicRisk >= 0.3 || remainingInventoryDays < 15) {
+    } else if (!isMitigated && (dynamicRisk >= 0.3 || remainingInventoryDays < 10)) {
       status = "WARNING";
     }
 
