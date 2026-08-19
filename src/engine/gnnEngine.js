@@ -35,10 +35,10 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     // Weight factor based on edge lead time and capacity dependency
-    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.3);
-    const propagatedRisk = sourceNode.gnnLayer0 * weight * 0.85;
+    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.35);
+    const propagatedRisk = sourceNode.gnnLayer0 * weight * 0.95;
 
-    if (propagatedRisk > 0.1) {
+    if (propagatedRisk > 0.05) {
       targetNode.gnnLayer1 = Math.max(targetNode.gnnLayer1, propagatedRisk);
       if (sourceNode.hopDistance + 1 < targetNode.hopDistance) {
         targetNode.hopDistance = sourceNode.hopDistance + 1;
@@ -55,10 +55,10 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1);
-    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.25);
-    const propagatedRisk = sourceCombinedRisk * weight * 0.75;
+    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.3);
+    const propagatedRisk = sourceCombinedRisk * weight * 0.85;
 
-    if (propagatedRisk > 0.1) {
+    if (propagatedRisk > 0.05) {
       targetNode.gnnLayer2 = Math.max(targetNode.gnnLayer2, propagatedRisk);
       if (sourceNode.hopDistance + 1 < targetNode.hopDistance) {
         targetNode.hopDistance = sourceNode.hopDistance + 1;
@@ -73,7 +73,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1, sourceNode.gnnLayer2);
-    const weight = 0.65;
+    const weight = 0.75;
     const propagatedRisk = sourceCombinedRisk * weight;
 
     if (propagatedRisk > 0.05) {
@@ -88,30 +88,30 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     // Aggregated GNN score (ReLU non-linearity + max pooling)
     let aggregatedRisk = Math.max(
       node.gnnLayer0,
-      node.gnnLayer1 * 0.9,
-      node.gnnLayer2 * 0.8,
-      node.gnnLayer3 * 0.7
+      node.gnnLayer1 * 0.95,
+      node.gnnLayer2 * 0.9,
+      node.gnnLayer3 * 0.85
     );
 
     // Apply timeline propagation multiplier: as time progresses, inventory depletes & delays compound
     let dynamicRisk = aggregatedRisk;
-    if (timelineDays > 0 && aggregatedRisk > 0.1) {
-      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.4));
+    if (timelineDays > 0 && aggregatedRisk > 0.05) {
+      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.6));
     }
 
     // Calculate Inventory Buffer Depletion
-    const depletionRate = dynamicRisk * 15 * (timelineFactor || 0.5);
+    const depletionRate = timelineDays > 0 ? (timelineDays * (0.4 + dynamicRisk * 0.8)) : 0;
     const remainingInventoryDays = Math.max(0, Math.round(node.inventoryDays - depletionRate));
 
     // Calculate Downstream Delay Projection in Days
     let delayDays = 0;
-    if (node.disruptionScore >= 0.7) {
+    if (node.disruptionScore >= 0.6) {
       // Direct disruption
       delayDays = Math.round(30 * (1 + timelineFactor) * node.disruptionScore);
-    } else if (dynamicRisk > 0.2) {
+    } else if (dynamicRisk > 0.1) {
       // Downstream ripple effect
-      const hopMult = node.hopDistance === 1 ? 1.0 : node.hopDistance === 2 ? 1.5 : 2.0;
-      delayDays = Math.round(18 * dynamicRisk * hopMult * (1 + timelineFactor * 0.6));
+      const hopMult = node.hopDistance === 1 ? 1.2 : node.hopDistance === 2 ? 1.6 : 2.0;
+      delayDays = Math.round(15 * dynamicRisk * hopMult * (1 + timelineFactor * 0.8));
     }
 
     // Rerouted status check
@@ -127,7 +127,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
       status = "REROUTED";
     } else if (node.disruptionScore >= 0.6) {
       status = "DISRUPTED";
-    } else if (dynamicRisk >= 0.35 || remainingInventoryDays < 5) {
+    } else if (dynamicRisk >= 0.3 || remainingInventoryDays < 15) {
       status = "WARNING";
     }
 
