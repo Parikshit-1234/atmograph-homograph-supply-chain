@@ -35,7 +35,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     // Weight factor based on edge lead time and capacity dependency
-    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.35);
+    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 8000 + 0.4);
     const propagatedRisk = sourceNode.gnnLayer0 * weight * 0.95;
 
     if (propagatedRisk > 0.05) {
@@ -55,8 +55,8 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1);
-    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 10000 + 0.3);
-    const propagatedRisk = sourceCombinedRisk * weight * 0.85;
+    const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 8000 + 0.35);
+    const propagatedRisk = sourceCombinedRisk * weight * 0.88;
 
     if (propagatedRisk > 0.05) {
       targetNode.gnnLayer2 = Math.max(targetNode.gnnLayer2, propagatedRisk);
@@ -73,11 +73,14 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     if (!sourceNode || !targetNode) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1, sourceNode.gnnLayer2);
-    const weight = 0.75;
+    const weight = 0.8;
     const propagatedRisk = sourceCombinedRisk * weight;
 
     if (propagatedRisk > 0.05) {
       targetNode.gnnLayer3 = Math.max(targetNode.gnnLayer3, propagatedRisk);
+      if (sourceNode.hopDistance + 1 < targetNode.hopDistance) {
+        targetNode.hopDistance = sourceNode.hopDistance + 1;
+      }
     }
   });
 
@@ -97,23 +100,23 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     const isDirectlyRerouted = node.isRerouted || (node.status === "REROUTED");
     const areUpstreamMitigated = node.upstreamSources.length > 0 && node.upstreamSources.every(src => {
       const srcNode = nodeMap.get(src.id);
-      return srcNode && (srcNode.status === "REROUTED" || srcNode.isRerouted);
+      return !srcNode || srcNode.status === "REROUTED" || srcNode.isRerouted || srcNode.gnnLayer0 < 0.2;
     });
     const isMitigated = isDirectlyRerouted || areUpstreamMitigated;
 
     // Apply timeline propagation multiplier: as time progresses, inventory depletes & delays compound
     let dynamicRisk = aggregatedRisk;
     if (isMitigated) {
-      dynamicRisk = Math.min(dynamicRisk, 0.05);
+      dynamicRisk = 0;
     } else if (timelineDays > 0 && aggregatedRisk > 0.05) {
-      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.5));
+      dynamicRisk = Math.min(1.0, aggregatedRisk * (1 + timelineFactor * 0.6));
     }
 
     // Calculate Inventory Buffer Depletion
-    // Only deplete inventory if there is active, unmitigated risk (dynamicRisk > 0.15)
+    // Only deplete inventory if there is active, unmitigated risk
     let depletionRate = 0;
-    if (!isMitigated && timelineDays > 0 && dynamicRisk > 0.15) {
-      depletionRate = timelineDays * (dynamicRisk * 1.1);
+    if (!isMitigated && timelineDays > 0 && dynamicRisk > 0.1) {
+      depletionRate = timelineDays * (0.35 + dynamicRisk * 0.9);
     }
     const remainingInventoryDays = Math.max(0, Math.round(node.inventoryDays - depletionRate));
 
@@ -124,10 +127,10 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
     } else if (node.disruptionScore >= 0.6) {
       // Direct disruption
       delayDays = Math.round(30 * (1 + timelineFactor) * node.disruptionScore);
-    } else if (dynamicRisk > 0.15) {
+    } else if (dynamicRisk > 0.1) {
       // Downstream ripple effect
-      const hopMult = node.hopDistance === 1 ? 1.2 : node.hopDistance === 2 ? 1.5 : 1.8;
-      delayDays = Math.round(15 * dynamicRisk * hopMult * (1 + timelineFactor * 0.6));
+      const hopMult = node.hopDistance === 1 ? 1.2 : node.hopDistance === 2 ? 1.6 : 2.0;
+      delayDays = Math.round(15 * dynamicRisk * hopMult * (1 + timelineFactor * 0.7));
     }
 
     // Status classification
@@ -136,7 +139,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
       status = "REROUTED";
     } else if (node.disruptionScore >= 0.6 && !isDirectlyRerouted) {
       status = "DISRUPTED";
-    } else if (!isMitigated && (dynamicRisk >= 0.3 || remainingInventoryDays < 10)) {
+    } else if (!isMitigated && (dynamicRisk >= 0.25 || remainingInventoryDays < 15)) {
       status = "WARNING";
     }
 
