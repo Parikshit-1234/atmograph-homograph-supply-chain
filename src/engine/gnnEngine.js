@@ -11,28 +11,32 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
   
   // Initialize node states
   nodes.forEach(node => {
+    const isNodeRerouted = node.isRerouted || (node.status === "REROUTED");
+    const initialDisruption = isNodeRerouted ? 0.0 : (node.disruptionScore || 0);
+
     nodeMap.set(node.id, {
       ...node,
-      gnnLayer0: node.disruptionScore || 0,
+      disruptionScore: initialDisruption,
+      gnnLayer0: initialDisruption,
       gnnLayer1: 0,
       gnnLayer2: 0,
       gnnLayer3: 0,
-      effectiveRisk: node.disruptionScore || 0,
-      hopDistance: node.disruptionScore > 0.5 ? 0 : Infinity,
+      effectiveRisk: initialDisruption,
+      hopDistance: initialDisruption > 0.5 ? 0 : Infinity,
       upstreamSources: [],
       attentionWeights: {},
-      isRerouted: false
+      isRerouted: isNodeRerouted
     });
   });
 
-  // Identify active edges (excluding rerouted/bypassed edges unless replaced)
+  // Identify active edges (excluding rerouted/bypassed edges)
   const activeEdges = edges.filter(e => !e.isRerouted);
 
   // --- GNN LAYER 1 PASS: Direct 1-hop Neighbors ---
   activeEdges.forEach(edge => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
-    if (!sourceNode || !targetNode) return;
+    if (!sourceNode || !targetNode || sourceNode.isRerouted) return;
 
     // Weight factor based on edge lead time and capacity dependency
     const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 8000 + 0.4);
@@ -52,7 +56,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
   activeEdges.forEach(edge => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
-    if (!sourceNode || !targetNode) return;
+    if (!sourceNode || !targetNode || sourceNode.isRerouted) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1);
     const weight = Math.min(1.0, (edge.capacityTEU || 2000) / 8000 + 0.35);
@@ -70,7 +74,7 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
   activeEdges.forEach(edge => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
-    if (!sourceNode || !targetNode) return;
+    if (!sourceNode || !targetNode || sourceNode.isRerouted) return;
 
     const sourceCombinedRisk = Math.max(sourceNode.gnnLayer0, sourceNode.gnnLayer1, sourceNode.gnnLayer2);
     const weight = 0.8;
@@ -98,11 +102,14 @@ export function computeGNNRippleEffect(nodes, edges, timelineDays = 0, reroutedE
 
     // Check direct and upstream reroute/mitigation status
     const isDirectlyRerouted = node.isRerouted || (node.status === "REROUTED");
-    const areUpstreamMitigated = node.upstreamSources.length > 0 && node.upstreamSources.every(src => {
+    
+    // An upstream source is active ONLY if it is NOT rerouted and has real disruption
+    const hasActiveUnmitigatedUpstream = node.upstreamSources.some(src => {
       const srcNode = nodeMap.get(src.id);
-      return !srcNode || srcNode.status === "REROUTED" || srcNode.isRerouted || srcNode.gnnLayer0 < 0.2;
+      return srcNode && srcNode.status !== "REROUTED" && !srcNode.isRerouted && srcNode.gnnLayer0 >= 0.2;
     });
-    const isMitigated = isDirectlyRerouted || areUpstreamMitigated;
+
+    const isMitigated = isDirectlyRerouted || (!hasActiveUnmitigatedUpstream && node.gnnLayer0 < 0.2);
 
     // Apply timeline propagation multiplier: as time progresses, inventory depletes & delays compound
     let dynamicRisk = aggregatedRisk;
