@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "node server/index.js",
+    "seed": "node scripts/seedNeo4j.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
