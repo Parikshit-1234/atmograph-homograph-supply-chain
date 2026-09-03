@@ -1,6 +1,9 @@
 services:
+  # -------------------------------------------------------------
+  # 1. FRONTEND STATIC SITE (Vite + React 19)
+  # -------------------------------------------------------------
   - type: web
-    name: atmograph-supply-chain
+    name: atmograph-frontend
     runtime: static
     buildCommand: npm run build
     staticPublishPath: ./dist
@@ -8,3 +11,29 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: atmograph-backend-api
+          property: host
+
+  # -------------------------------------------------------------
+  # 2. BACKEND API WEB SERVICE (Node.js Express + GNN + Neo4j API)
+  # -------------------------------------------------------------
+  - type: web
+    name: atmograph-backend-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
