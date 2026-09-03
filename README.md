@@ -3,12 +3,15 @@
 > **Next-Gen Autonomous Supply Chain Risk Intelligence & Multi-Hop Ripple Effect Simulator**  
 > Powered by Graph Neural Networks (GNN), High-Precision NLP Engine, and In-Memory Neo4j Cypher Graph Analytics.
 
+[![Live Demo](https://img.shields.io/badge/%F0%9F%9A%80_Live_Demo-Render_Deployment-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://atmograph-homograph-supply-chain.onrender.com)
 ![React](https://img.shields.io/badge/React-19.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-8.2-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4.3-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![D3.js](https://img.shields.io/badge/D3.js-v7.9-F9A03F?style=for-the-badge&logo=d3.js&logoColor=white)
 ![Neo4j](https://img.shields.io/badge/Neo4j-Cypher-008CC1?style=for-the-badge&logo=neo4j&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
+
+🌐 **Live Web Application**: [https://atmograph-homograph-supply-chain.onrender.com](https://atmograph-homograph-supply-chain.onrender.com)
 
 ---
 
